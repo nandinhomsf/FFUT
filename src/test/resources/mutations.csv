@@ -1,0 +1,2 @@
+Main.java,Main,org.pitest.mutationtest.engine.gregor.mutators.MathMutator,sum,3,KILLED,MainTest.[engine:junit-jupiter]/[class:MainTest]/[method:testSum()]
+Main.java,Main,org.pitest.mutationtest.engine.gregor.mutators.returns.PrimitiveReturnsMutator,sum,3,KILLED,MainTest.[engine:junit-jupiter]/[class:MainTest]/[method:testSum()]

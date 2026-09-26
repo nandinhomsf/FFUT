@@ -1,0 +1,22 @@
+services:
+  mongodb:
+    container_name: 'tuff-mongodb'
+    image: 'mongo:7.0'
+    environment:
+      - 'MONGO_INITDB_DATABASE=ffut'
+    ports:
+      - '27017:27017'
+    volumes:
+      - 'tuff-mongodb-data:/data/db'
+
+  rabbitmq:
+    container_name: 'tuff-rabbit'
+    image: 'rabbitmq:latest'
+    environment:
+      - 'RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:?defina RABBITMQ_PASSWORD no .env}'
+      - 'RABBITMQ_DEFAULT_USER=${RABBITMQ_USERNAME:-tuff}'
+    ports:
+      - '5672:5672'
+
+volumes:
+  tuff-mongodb-data:

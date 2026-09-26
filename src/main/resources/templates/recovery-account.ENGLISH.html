@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pt">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <title>Account Recovery</title>
+  <style>
+    body,div {text-align: center; margin: auto; width: 100%}
+  </style>
+</head>
+<body>
+<div>
+  <h1>Hello!</h1>
+  <p>Recovery your account using the link below, the link will expire in 5 minutes.</p>
+  <a th:href="${link}">Recovery your Account</a>
+</div>
+</body>
+</html>
