@@ -17,4 +17,4 @@ cd /warmup && mvn org.pitest:pitest-maven:mutationCoverage
 
 # Run the application
 
-cd / && java -jar /app.jar --spring.config.location=file:/application.properties
+cd / && java -jar /app.jar
