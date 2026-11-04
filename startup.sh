@@ -1,20 +1,6 @@
 #!/bin/bash
 
-# Cache pitest
-
-cd /warmup && mvn clean package -DskipTests
-
-# Warmup pitest
-
-cd /warmup && mvn clean package
-cd /warmup && mvn org.pitest:pitest-maven:mutationCoverage
-
-cd /warmup && mvn clean package
-cd /warmup && mvn org.pitest:pitest-maven:mutationCoverage
-
-cd /warmup && mvn clean package
-cd /warmup && mvn org.pitest:pitest-maven:mutationCoverage
-
-# Run the application
+# O aquecimento do Maven/PIT agora roda no build da imagem (ver Dockerfile),
+# entao o boot do container so precisa subir a aplicacao.
 
 cd / && java -jar /app.jar
