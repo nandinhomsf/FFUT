@@ -49,7 +49,7 @@ public class UserAccountEntity {
 
     private LocalDateTime createdAt;
 
-    private Boolean verified = false;
+    private Boolean verified = true;
 
     private Boolean active = true;
 
