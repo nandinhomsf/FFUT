@@ -127,7 +127,7 @@ public class ProcessRunnerEntity {
 
         fileWriter = new FileWriter(mainFile);
         printWriter = new PrintWriter(fileWriter);
-        printWriter.print(answer.getChallengeCode());
+        printWriter.print(answer.hasEvaluationCode() ? answer.getEvaluationCode() : answer.getChallengeCode());
         printWriter.close();
 
         Path testPath = Files.createDirectory(sourcePath.resolve("test"));

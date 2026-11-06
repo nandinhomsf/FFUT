@@ -45,6 +45,7 @@ public class ChallengeService {
         entity.setCode(request.code());
         entity.setChallengeVersion(0);
         entity.setDifficulty(request.difficulty());
+        entity.setEvaluationCode(normalizeEvaluationCode(request.evaluationCode()));
 
         challengeRepository.save(entity);
 
@@ -66,6 +67,9 @@ public class ChallengeService {
         entity.setDescription(data.description());
         entity.setCode(data.code());
         entity.setDifficulty(data.difficulty());
+        if (data.evaluationCode() != null) {
+            entity.setEvaluationCode(normalizeEvaluationCode(data.evaluationCode()));
+        }
 
         entity.incrementChallengeVersion();
 
@@ -77,6 +81,10 @@ public class ChallengeService {
         ChallengeEntity entity = getById(id);
 
         challengeRepository.delete(entity);
+    }
+
+    private String normalizeEvaluationCode(String code) {
+        return code == null || code.isBlank() ? null : code;
     }
 
     private ChallengeEntity getById(String id) {

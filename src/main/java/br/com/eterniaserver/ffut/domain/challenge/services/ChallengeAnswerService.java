@@ -23,7 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Comparator;
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -35,6 +37,10 @@ public class ChallengeAnswerService {
     private final ChallengeAnswerRepository answerRepository;
 
     private final ChallengeProducer challengeProducer;
+
+    private static final Comparator<ReadMutationResultResponse> LOCATION_FREE_ORDER = Comparator
+            .comparing(ReadMutationResultResponse::mutationType, Comparator.nullsLast(Comparator.naturalOrder()))
+            .thenComparing(ReadMutationResultResponse::isKilled, Comparator.nullsLast(Comparator.naturalOrder()));
 
     @Transactional
     public ListChallengeAnswerResponse listByUser(int page, int size, String userId) {
@@ -73,6 +79,9 @@ public class ChallengeAnswerService {
         entity.setStatus(AnswerStatus.PENDING);
         entity.setChallengeVersion(challenge.getChallengeVersion());
         entity.setChallengeCode(challenge.getCode());
+        if (challenge.hasEvaluationCode()) {
+            entity.setEvaluationCode(challenge.getEvaluationCode());
+        }
         entity.setUserTestCode(request.testAnswer());
         entity.setCreatedAt(new Date(System.currentTimeMillis()));
 
@@ -100,16 +109,27 @@ public class ChallengeAnswerService {
                 entity.getUserTestCode(),
                 entity.getStatus(),
                 entity.getCreatedAt(),
-                toResponse(entity.getChallengeResult())
+                toResponse(entity.getChallengeResult(), entity.hasEvaluationCode())
         );
     }
 
-    private Optional<ReadChallengeResultResponse> toResponse(Optional<ChallengeResultEntity> optional) {
+    private Optional<ReadChallengeResultResponse> toResponse(Optional<ChallengeResultEntity> optional, boolean hiddenReference) {
         if (optional.isEmpty()) {
             return Optional.empty();
         }
 
         ChallengeResultEntity entity = optional.get();
+
+        // Linhas, descrições e a ordem original das mutações apontariam para a referência oculta.
+        List<ReadLineResultResponse> lineResults = hiddenReference
+                ? List.of()
+                : entity.getLineResults().stream().map(this::toResponse).toList();
+        List<ReadMutationResultResponse> mutationResults = hiddenReference
+                ? entity.getMutationResults().stream()
+                        .map(m -> new ReadMutationResultResponse(m.getMutationType(), null, m.getIsKilled(), null))
+                        .sorted(LOCATION_FREE_ORDER)
+                        .toList()
+                : entity.getMutationResults().stream().map(this::toResponse).toList();
 
         return Optional.of(
                 new ReadChallengeResultResponse(
@@ -127,8 +147,8 @@ public class ChallengeAnswerService {
                         entity.getComplexityMissed(),
                         entity.getMethodCoverage(),
                         entity.getMethodMissed(),
-                        entity.getLineResults().stream().map(this::toResponse).toList(),
-                        entity.getMutationResults().stream().map(this::toResponse).toList()
+                        lineResults,
+                        mutationResults
                 )
         );
     }

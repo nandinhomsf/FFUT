@@ -28,9 +28,16 @@ public class ChallengeEntity {
 
     private String code;
 
+    // Referência oculta: quando presente, as submissões rodam contra ela; nunca sai pela API.
+    private String evaluationCode;
+
     private ChallengeDifficulty difficulty;
 
     private List<ChallengeRankEntity> rank = new ArrayList<>();
+
+    public boolean hasEvaluationCode() {
+        return evaluationCode != null && !evaluationCode.isBlank();
+    }
 
     public void incrementChallengeVersion() {
         challengeVersion++;

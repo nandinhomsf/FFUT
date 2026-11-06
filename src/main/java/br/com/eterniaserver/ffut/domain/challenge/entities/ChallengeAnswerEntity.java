@@ -33,11 +33,18 @@ public class ChallengeAnswerEntity {
 
     private String challengeCode;
 
+    // Cópia da referência oculta no momento da submissão; challengeCode segue sendo o código exibido.
+    private String evaluationCode;
+
     private String userTestCode;
 
     private ChallengeResultEntity challengeResult;
 
     private Date createdAt;
+
+    public boolean hasEvaluationCode() {
+        return evaluationCode != null && !evaluationCode.isBlank();
+    }
 
     public Optional<ChallengeResultEntity> getChallengeResult() {
         return Optional.ofNullable(challengeResult);
