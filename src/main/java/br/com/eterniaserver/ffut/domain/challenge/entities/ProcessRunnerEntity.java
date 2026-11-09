@@ -107,6 +107,31 @@ public class ProcessRunnerEntity {
         } catch (IOException | InterruptedException ignored) { }
     }
 
+    // Limites de memória para as JVMs filhas (Maven, surefire e o processo do PIT), que herdam
+    // JAVA_TOOL_OPTIONS. Sem isso, a aplicação + Maven + PIT passam dos 512 MB do plano grátis do Render.
+    // Medido com o desafio das Multas: pico de ~380 MB para ~220 MB, com os mesmos resultados.
+    private static final String CHILD_JVM_OPTIONS = "-Xmx64m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1 "
+            + "-XX:ReservedCodeCacheSize=24m -XX:MaxMetaspaceSize=80m";
+
+    private static final long STEP_TIMEOUT_SECONDS = 120;
+
+    private static void runStep(Path answerPath, String command, String logName) throws IOException, InterruptedException {
+        ProcessBuilder builder = new ProcessBuilder("bash", "-c", command)
+                .directory(answerPath.toFile())
+                .redirectErrorStream(true)
+                // A saída vai para arquivo: um pipe nunca lido pode encher e travar o processo.
+                .redirectOutput(answerPath.resolve(logName).toFile());
+        builder.environment().put("JAVA_TOOL_OPTIONS", CHILD_JVM_OPTIONS);
+
+        Process process = builder.start();
+        if (!process.waitFor(STEP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            // Sem isso, um processo que estourou o tempo continuava rodando junto com o próximo passo.
+            process.descendants().forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
+            process.waitFor(10, TimeUnit.SECONDS);
+        }
+    }
+
     private void run() throws IOException, InterruptedException {
         Path answerPath = Files.createTempDirectory(answer.getId());
 
@@ -140,13 +165,8 @@ public class ProcessRunnerEntity {
         printWriter.print(answer.getUserTestCode());
         printWriter.close();
 
-        ProcessBuilder builder = new ProcessBuilder().command("bash", "-c", "cd " + answerPath + " && " + MAVEN_COMMAND);
-        Process process = builder.start();
-        process.waitFor(120, TimeUnit.SECONDS);
-
-        builder = new ProcessBuilder().command("bash", "-c", "cd " + answerPath + " && " + PITEST_COMMAND);
-        process = builder.start();
-        process.waitFor(120, TimeUnit.SECONDS);
+        runStep(answerPath, MAVEN_COMMAND, "build.log");
+        runStep(answerPath, PITEST_COMMAND, "pitest.log");
 
         pitestOutputPath = answerPath + "/target/pit-reports/mutations.csv";
         jacocoOutputPath = answerPath + "/target/jacoco-report/jacoco.xml";

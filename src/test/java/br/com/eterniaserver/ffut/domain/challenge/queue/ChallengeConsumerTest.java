@@ -11,7 +11,9 @@ import br.com.eterniaserver.ffut.domain.challenge.entities.ChallengeAnswerEntity
 
 import br.com.eterniaserver.ffut.domain.user.entities.UserAccountEntity;
 import br.com.eterniaserver.ffut.domain.user.repositories.UserAccountRepository;
+import br.com.eterniaserver.ffut.domain.challenge.enums.AnswerStatus;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import org.mockito.Mockito;
@@ -196,5 +198,48 @@ class ChallengeConsumerTest {
                 .save(challenge);
         Mockito.verify(userAccountRepositoryMock, Mockito.times(1))
                 .save(user);
+    }
+
+    private ChallengeAnswerEntity storedAnswer(String id, AnswerStatus status) {
+        ChallengeAnswerEntity answer = new ChallengeAnswerEntity();
+        answer.setId(id);
+        answer.setChallengeId("#CHALLENGE1");
+        answer.setUserId("#USER1");
+        answer.setStatus(status);
+        Mockito.when(challengeAnswerRepositoryMock.findById(id)).thenReturn(Optional.of(answer));
+        return answer;
+    }
+
+    @Test
+    void shouldGiveUpOnRedeliveryAfterCrash() {
+        ChallengeAnswerEntity answer = storedAnswer("#ANSWER1", AnswerStatus.PROCESSING);
+
+        challengeConsumer.receiveChallenger("#ANSWER1");
+
+        Assertions.assertEquals(AnswerStatus.INCORRECT, answer.getStatus());
+        Mockito.verify(challengeAnswerRepositoryMock).save(answer);
+        Mockito.verifyNoInteractions(testRunnerServiceMock, challengeRepositoryMock, userAccountRepositoryMock);
+    }
+
+    @Test
+    void shouldIgnoreRedeliveryOfFinishedAnswer() {
+        ChallengeAnswerEntity answer = storedAnswer("#ANSWER1", AnswerStatus.CORRECT);
+
+        challengeConsumer.receiveChallenger("#ANSWER1");
+
+        Assertions.assertEquals(AnswerStatus.CORRECT, answer.getStatus());
+        Mockito.verify(challengeAnswerRepositoryMock, Mockito.never()).save(Mockito.any());
+        Mockito.verifyNoInteractions(testRunnerServiceMock);
+    }
+
+    @Test
+    void shouldMarkIncorrectInsteadOfRequeueingWhenProcessingFails() {
+        ChallengeAnswerEntity answer = storedAnswer("#ANSWER1", AnswerStatus.PENDING);
+        Mockito.when(testRunnerServiceMock.run(answer)).thenThrow(new IllegalStateException("boom"));
+
+        Assertions.assertDoesNotThrow(() -> challengeConsumer.receiveChallenger("#ANSWER1"));
+
+        Assertions.assertEquals(AnswerStatus.INCORRECT, answer.getStatus());
+        Mockito.verifyNoInteractions(challengeRepositoryMock, userAccountRepositoryMock);
     }
 }

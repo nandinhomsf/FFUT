@@ -42,11 +42,33 @@ public class ChallengeConsumer {
 
         ChallengeAnswerEntity answer = challengeAnswerOptional.get();
 
+        if (answer.getStatus() == AnswerStatus.PROCESSING) {
+            // Reentrega: o servidor caiu (ex.: falta de memória) no meio desta submissão. Rodar de novo
+            // derrubaria o servidor outra vez, em loop; ela é encerrada sem nota e sem mexer no ranking.
+            LOGGER.warning("Challenge answer redelivered after a crash, giving up: " + challengeAnswerId);
+            answer.setStatus(AnswerStatus.INCORRECT);
+            challengeAnswerRepository.save(answer);
+            return;
+        }
+
+        if (answer.getStatus() == AnswerStatus.CORRECT || answer.getStatus() == AnswerStatus.INCORRECT) {
+            LOGGER.warning("Challenge answer already processed, ignoring redelivery: " + challengeAnswerId);
+            return;
+        }
+
         answer.setStatus(AnswerStatus.PROCESSING);
 
         challengeAnswerRepository.save(answer);
 
-        condenseAndProcess(answer);
+        try {
+            condenseAndProcess(answer);
+        } catch (RuntimeException exception) {
+            // Sem isso a exceção devolvia a mensagem para a fila, que a reentregava para sempre.
+            LOGGER.severe("Failed to process challenge answer " + challengeAnswerId + ": " + exception);
+            answer.setStatus(AnswerStatus.INCORRECT);
+            challengeAnswerRepository.save(answer);
+            return;
+        }
 
         Optional<ChallengeEntity> challengeOptional = challengeRepository.findById(answer.getChallengeId());
         Optional<UserAccountEntity> userOptional = userAccountRepository.findById(answer.getUserId());
