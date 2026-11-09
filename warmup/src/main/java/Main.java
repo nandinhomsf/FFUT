@@ -1,5 +1,3 @@
-package br.com.eterniaserver.testrunner;
-
 public class Main {
 
     public int sum(int a, int b) {

@@ -8,11 +8,14 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 public class ProcessRunnerEntity {
 
-    private static final String POM_FILE = """
+    static final String POM_FILE = """
             <project xmlns="http://maven.apache.org/POM/4.0.0"
                      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                      xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -87,8 +90,10 @@ public class ProcessRunnerEntity {
             </project>
     """;
 
-    private static final String MAVEN_COMMAND = "mvn clean package";
-    private static final String PITEST_COMMAND = "mvn org.pitest:pitest-maven:mutationCoverage";
+    // prepare-package roda os testes e o relatório do JaCoCo sem montar o jar, que não é usado e
+    // estourava a memória com a CPU limitada do Render.
+    static final String MAVEN_COMMAND = "mvn clean prepare-package";
+    static final String PITEST_COMMAND = "mvn org.pitest:pitest-maven:mutationCoverage";
 
     @Getter
     private String pitestOutputPath;
@@ -110,10 +115,19 @@ public class ProcessRunnerEntity {
     // Limites de memória para as JVMs filhas (Maven, surefire e o processo do PIT), que herdam
     // JAVA_TOOL_OPTIONS. Sem isso, a aplicação + Maven + PIT passam dos 512 MB do plano grátis do Render.
     // Medido com o desafio das Multas: pico de ~380 MB para ~220 MB, com os mesmos resultados.
+    private static final Logger LOGGER = Logger.getLogger(ProcessRunnerEntity.class.getName());
+
     private static final String CHILD_JVM_OPTIONS = "-Xmx64m -Xss512k -XX:+UseSerialGC -XX:TieredStopAtLevel=1 "
             + "-XX:ReservedCodeCacheSize=24m -XX:MaxMetaspaceSize=80m";
 
-    private static final long STEP_TIMEOUT_SECONDS = 120;
+    // O processo do próprio Maven (que também roda a análise do PIT) precisa de um pouco mais de heap;
+    // MAVEN_OPTS vem depois de JAVA_TOOL_OPTIONS na linha de comando e prevalece só para ele.
+    private static final String MAVEN_JVM_OPTIONS = "-Xmx128m";
+
+    // Folga para a CPU de 0,1 do plano grátis do Render (simulado localmente: ~47 s por etapa).
+    private static final long STEP_TIMEOUT_SECONDS = 300;
+
+    private static final int LOG_TAIL_LINES = 30;
 
     private static void runStep(Path answerPath, String command, String logName) throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder("bash", "-c", command)
@@ -122,13 +136,36 @@ public class ProcessRunnerEntity {
                 // A saída vai para arquivo: um pipe nunca lido pode encher e travar o processo.
                 .redirectOutput(answerPath.resolve(logName).toFile());
         builder.environment().put("JAVA_TOOL_OPTIONS", CHILD_JVM_OPTIONS);
+        builder.environment().put("MAVEN_OPTS", MAVEN_JVM_OPTIONS);
 
+        long start = System.nanoTime();
         Process process = builder.start();
-        if (!process.waitFor(STEP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+        boolean finished = process.waitFor(STEP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        if (!finished) {
             // Sem isso, um processo que estourou o tempo continuava rodando junto com o próximo passo.
             process.descendants().forEach(ProcessHandle::destroyForcibly);
             process.destroyForcibly();
             process.waitFor(10, TimeUnit.SECONDS);
+        }
+        long seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start);
+
+        if (finished && process.exitValue() == 0) {
+            LOGGER.info(() -> "Runner step '" + command + "' finished in " + seconds + "s");
+            return;
+        }
+
+        // A saída das etapas só fica no disco; em caso de problema, o final dela vai para o log do servidor.
+        String outcome = finished ? "failed with exit code " + process.exitValue() : "timed out";
+        LOGGER.warning("Runner step '" + command + "' " + outcome + " after " + seconds + "s. Last lines:\n"
+                + tail(answerPath.resolve(logName)));
+    }
+
+    private static String tail(Path log) {
+        try {
+            List<String> lines = Files.readAllLines(log);
+            return String.join("\n", lines.subList(Math.max(0, lines.size() - LOG_TAIL_LINES), lines.size()));
+        } catch (IOException | UncheckedIOException exception) {
+            return "(could not read " + log + ": " + exception.getMessage() + ")";
         }
     }
 

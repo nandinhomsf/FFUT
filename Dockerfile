@@ -20,18 +20,14 @@ COPY --from=build ${JAR_FILE} app.jar
 
 COPY warmup warmup
 
-# Aquece o cache local do Maven (~/.m2) com os plugins do Maven/PIT durante o
+# Aquece o cache local do Maven (~/.m2) com os plugins do Maven/PIT/JaCoCo durante o
 # build da imagem, nao a cada boot do container. Isso fica assim porque o
 # cache fica gravado nesta camada da imagem; rodar isso no startup.sh fazia
 # o container demorar minutos pra responder toda vez que acordava de um
-# periodo parado (ex: plano free do Render).
+# periodo parado (ex: plano free do Render). warmup/pom.xml precisa ser igual ao
+# POM do runner (ProcessRunnerEntity.POM_FILE); um teste garante isso.
 RUN cd warmup \
-    && mvn clean package -DskipTests \
-    && mvn clean package \
-    && mvn org.pitest:pitest-maven:mutationCoverage \
-    && mvn clean package \
-    && mvn org.pitest:pitest-maven:mutationCoverage \
-    && mvn clean package \
+    && mvn clean prepare-package \
     && mvn org.pitest:pitest-maven:mutationCoverage
 
 COPY startup.sh startup.sh
